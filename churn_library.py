@@ -3,38 +3,26 @@ import logging
 # import libraries
 import os
 from pathlib import Path
-from typing import Callable, Tuple
+from typing import Any, Callable, Tuple
 
 import pandas as pd
 import seaborn as sns
+from PIL import Image, ImageDraw
 from matplotlib import pyplot as plt
-from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import classification_report
+from sklearn.model_selection import GridSearchCV, train_test_split
+
+from config import CAT_COLUMNS, COLUMNS_TO_KEEP, RANDOM_FOREST_PARAMS_GRID, TARGET
 
 os.environ['QT_QPA_PLATFORM'] = 'offscreen'
 
-CAT_COLUMNS = [
-    'Gender',
-    'Education_Level',
-    'Marital_Status',
-    'Income_Category',
-    'Card_Category'
-]
-
-COLUMNS_TO_KEEP = [
-    'Customer_Age', 'Dependent_count', 'Months_on_book',
-    'Total_Relationship_Count', 'Months_Inactive_12_mon',
-    'Contacts_Count_12_mon', 'Credit_Limit', 'Total_Revolving_Bal',
-    'Avg_Open_To_Buy', 'Total_Amt_Chng_Q4_Q1', 'Total_Trans_Amt',
-    'Total_Trans_Ct', 'Total_Ct_Chng_Q4_Q1', 'Avg_Utilization_Ratio',
-    'Gender_Churn', 'Education_Level_Churn', 'Marital_Status_Churn',
-    'Income_Category_Churn', 'Card_Category_Churn'
-]
-
-TARGET = 'Churn'
+SEED = 42
 
 logging.basicConfig(
     level=logging.INFO,
-    format='[%(asctime)s] {%(pathname)s:%(lineno)d} %(levelname)s - %(message)s',
+    format='[%(asctime)s] | %(funcName)s:%(lineno)d | %(levelname)s - %(message)s',
     datefmt='%H:%M:%S',
     handlers=[
         logging.FileHandler('./logs/log_churn.log'),
@@ -107,12 +95,12 @@ def plot_settings(plotting_function: Callable) -> Callable:
     """
     plt.figure(figsize=(20, 10))
 
-    def wrapper(*args, **kwargs):
+    def plotting_fn(*args, **kwargs):
         logging.info(f"Calling plotting function {plotting_function.__name__}")
         return plotting_function(*args, **kwargs)
 
     plt.clf()
-    return wrapper
+    return plotting_fn
 
 
 @plot_settings
@@ -187,7 +175,8 @@ def encoder_helper(df: pd.DataFrame, category_lst, response=None) -> pd.DataFram
     input:
             df: pandas dataframe
             category_lst: list of columns that contain categorical features
-            response: string of response name [optional argument that could be used for naming variables or index y column]
+            response: string of response name [optional argument that could be used for naming
+                variables or index y column]
 
     output:
             df: pandas dataframe with new columns for categorical variables
@@ -245,6 +234,7 @@ def perform_feature_engineering(df: pd.DataFrame, response=None) -> Tuple[
     x_train, x_test, y_train, y_test = train_test_split(X, Y, test_size=0.3, random_state=42)
     return x_train, x_test, y_train, y_test
 
+
 def classification_report_image(y_train,
                                 y_test,
                                 y_train_preds_lr,
@@ -265,8 +255,50 @@ def classification_report_image(y_train,
     output:
              None
     """
-    pass
+    logging.info("Creating classification reports")
+    logging.info("Computing reports for RF model")
+    train_rf_report = classification_report(y_train, y_train_preds_rf)
+    test_rf_report = classification_report(y_test, y_test_preds_rf)
 
+    print('random forest results')
+    print('test results')
+    print(test_rf_report)
+    print('train results')
+    print(train_rf_report)
+    save_text_to_image(train_rf_report, './images/train_report_rf.png')
+    save_text_to_image(test_rf_report, './images/test_report_rf.png')
+
+
+    logging.info("Computing reports for LR model")
+    train_lr_report = classification_report(y_train, y_train_preds_lr)
+    test_lr_report = classification_report(y_test, y_test_preds_lr)
+
+    print('logistic regression results')
+    print('test results')
+    print(test_lr_report)
+    print('train results')
+    print(train_lr_report)
+    save_text_to_image(train_lr_report, './images/train_report_lr.png')
+    save_text_to_image(test_lr_report, './images/test_report_lr.png')
+
+    logging.info("Reports done")
+
+def save_text_to_image(text: str, save_path: str) -> None:
+    """
+    Takes input text and converts it to png image and saves it
+    Args:
+        text: text to save
+        save_path: directory with file name and extension
+
+    Returns:
+        None
+    """
+    logging.info("Saving text to image")
+    report_image = Image.new('L', (200, 200))
+    draw_image = ImageDraw.Draw(report_image)
+    draw_image.text((20, 20), text, fill=(255,0,0))
+    report_image.save(save_path)
+    logging.info(f"Image saved to {save_path}")
 
 def feature_importance_plot(model, X_data, output_pth):
     """
@@ -283,7 +315,7 @@ def feature_importance_plot(model, X_data, output_pth):
 
 
 def train_models(X_train, X_test, y_train, y_test):
-    '''
+    """
     train, store model results: images + scores, and store models
     input:
               X_train: X training data
@@ -292,13 +324,33 @@ def train_models(X_train, X_test, y_train, y_test):
               y_test: y testing data
     output:
               None
-    '''
-    pass
+    """
+    logging.info("Training Models:")
+
+    logging.info("Training RF Classifier")
+    rf_classifier = RandomForestClassifier(random_state=SEED)
+    grid_search_rf = GridSearchCV(estimator=rf_classifier, param_grid=RANDOM_FOREST_PARAMS_GRID)
+    grid_search_rf.fit(X_train, y_train)
+
+    logging.info("RF model trained, creating predictions")
+    y_train_pred_rf = grid_search_rf.best_estimator_.predict(X_train)
+    y_test_pred_rf = grid_search_rf.best_estimator_.predict(X_test)
+    logging.info("Predictions calculated with success")
+
+    logging.info("Training Logistic Regression models")
+    logistic_regression = LogisticRegression(solver='lbfgs', max_iter=3000)
+    logistic_regression.fit(X_train, y_train)
+
+    logging.info("Logistic regression model trained, creating predictions")
+    y_train_pred_lr = logistic_regression.predict(X_train)
+    y_test_pred_lr = logistic_regression.predict(X_test)
+
+    classification_report_image(y_train, y_test, y_train_pred_lr, y_train_pred_rf, y_test_pred_lr, y_test_pred_rf)
 
 
 if __name__ == '__main__':
     df = import_data(r"./data/bank_data.csv")
     df = preprocess_columns(df)
     perform_eda(df)
-    df = encoder_helper(df, cat_columns)
-    print(df.head())
+    tran_test_sets = perform_feature_engineering(df)
+    train_models(*tran_test_sets)
