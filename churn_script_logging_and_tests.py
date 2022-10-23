@@ -1,4 +1,9 @@
-""" This file contains all the tests for the churn library """
+"""
+This file contains all the tests for the churn library
+
+Author: Wojciech Szenic
+Creation date: 2022-10-23
+"""
 
 import glob
 import logging

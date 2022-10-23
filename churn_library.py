@@ -1,4 +1,9 @@
-""" Module used to create a churn model and save related files to disc (diagnostics, model, etc) """
+"""
+Module used to create a churn model and save related files to disc (diagnostics, model, etc)
+
+Author: Wojciech Szenic
+Creation date: 2022-10-23
+"""
 import logging
 import os
 from collections import namedtuple
@@ -128,6 +133,7 @@ def create_histogram_from_column(df: pd.DataFrame, column_name: str) -> None:
     """
     df[column_name].hist()
     plt.savefig(f'./images/{column_name}_hist.png')
+    plt.clf()
 
 
 @plot_settings
